@@ -15,6 +15,7 @@ const publicPages = [
   "/events?prefecture=TOKYO&type=performance",
   "/calendar",
   "/calendar?month=2030-05",
+  "/calendar?from=2030-07-03",
   "/open-calls",
   `/events/${multiVenueId}`,
   "/events/e0000003-0000-4000-8000-000000000003",

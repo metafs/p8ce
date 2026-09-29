@@ -100,3 +100,52 @@ export function monthGrid(month: string): CalendarGrid {
 }
 
 export const weekdayLabels = ["日", "月", "火", "水", "木", "金", "土"];
+
+const dayPattern = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Days in the date strip of the day view: four weeks, Sunday first. */
+export const dateStripLength = 28;
+
+/**
+ * The day a day view starts from: the requested one when it is a valid
+ * `YYYY-MM-DD`, otherwise today in Tokyo.
+ */
+export function resolveDay(requested: string | null | undefined, now = new Date()) {
+  if (requested && dayPattern.test(requested) && dayString(dayNumber(requested)) === requested) {
+    return requested;
+  }
+  return tokyoDateKey(now.toISOString()) ?? "";
+}
+
+/** The Sunday on or before a day, where the date strip starts by default. */
+export function weekStart(day: string) {
+  return addDays(day, -weekdayIndex(day));
+}
+
+/** The days of the date strip that starts on `start`. */
+export function dateStrip(start: string, length = dateStripLength) {
+  return Array.from({ length }, (_, index) => addDays(start, index));
+}
+
+/**
+ * The day groups one page of the day view shows: every day from `from` on,
+ * whole days only, until at least `limit` rows are shown. `nextDay` is where
+ * the following page starts, or null when nothing is left.
+ */
+export function pageDays<T extends { day: string; items: readonly unknown[] }>(
+  days: readonly T[],
+  from: string,
+  limit: number,
+): { days: T[]; nextDay: string | null } {
+  const shown: T[] = [];
+  let count = 0;
+
+  for (const entry of days) {
+    if (entry.day < from || entry.items.length === 0) continue;
+    if (count >= limit) return { days: shown, nextDay: entry.day };
+    shown.push(entry);
+    count += entry.items.length;
+  }
+
+  return { days: shown, nextDay: null };
+}
