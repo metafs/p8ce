@@ -143,6 +143,10 @@ describe("parseCalendarQuery", () => {
       free: true,
     });
 
+    expect(parseCalendarQuery({ from: "2026-02-30", strip: "2026-02-30" })).toMatchObject({ from: null, strip: null });
+    // A strip start is aligned to the Sunday of its week.
+    expect(parseCalendarQuery({ strip: "2026-10-01" }).strip).toBe("2026-09-27");
+
     expect(parseCalendarQuery({ from: "soon", venue: "not-a-uuid", free: "yes", type: "dance" })).toMatchObject({
       from: null,
       venueId: null,

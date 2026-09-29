@@ -4,6 +4,7 @@ import {
   addDays,
   addMonths,
   dateStrip,
+  isCalendarDay,
   monthGrid,
   monthLabel,
   pageDays,
@@ -113,6 +114,13 @@ describe("day view", () => {
     expect(resolveDay("2026-02-30", now)).toBe("2026-09-28");
     expect(resolveDay("tomorrow", now)).toBe("2026-09-28");
     expect(resolveDay(null, now)).toBe("2026-09-28");
+  });
+
+  it("accepts only real calendar days", () => {
+    expect(isCalendarDay("2026-02-28")).toBe(true);
+    expect(isCalendarDay("2026-02-30")).toBe(false);
+    expect(isCalendarDay("2026-13-01")).toBe(false);
+    expect(isCalendarDay(null)).toBe(false);
   });
 
   it("builds a Sunday-first strip of four weeks", () => {

@@ -106,18 +106,24 @@ const dayPattern = /^\d{4}-\d{2}-\d{2}$/;
 /** Days in the date strip of the day view: four weeks, Sunday first. */
 export const dateStripLength = 28;
 
+/** Whether a string is a real `YYYY-MM-DD` calendar day (2026-02-30 is not). */
+export function isCalendarDay(value: string | null | undefined): value is string {
+  return Boolean(value && dayPattern.test(value) && dayString(dayNumber(value)) === value);
+}
+
 /**
  * The day a day view starts from: the requested one when it is a valid
  * `YYYY-MM-DD`, otherwise today in Tokyo.
  */
 export function resolveDay(requested: string | null | undefined, now = new Date()) {
-  if (requested && dayPattern.test(requested) && dayString(dayNumber(requested)) === requested) {
-    return requested;
-  }
+  if (isCalendarDay(requested)) return requested;
   return tokyoDateKey(now.toISOString()) ?? "";
 }
 
-/** The Sunday on or before a day, where the date strip starts by default. */
+/**
+ * The Sunday on or before a day. The date strip always starts here, so a
+ * requested strip start is aligned to its week before it is rendered.
+ */
 export function weekStart(day: string) {
   return addDays(day, -weekdayIndex(day));
 }

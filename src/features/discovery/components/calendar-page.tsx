@@ -193,7 +193,7 @@ function DateStrip({
   start: string;
   today: string;
 }) {
-  const strip = dateStrip(start);
+  const strip = dateStrip(weekStart(start));
   const filters = filtersOf(query);
 
   return (
@@ -210,46 +210,53 @@ function DateStrip({
         >
           ←
         </Link>
-        <ol className="date-strip-days">
-          {strip.map((day, index) => {
-            const [, monthNumber, date] = day.split("-").map(Number);
-            const label = dayLabel(day);
-            const isToday = day === today;
-            const selected = day === from;
-            const hasItems = (counts.get(day) ?? 0) > 0;
-            const inner = (
-              <>
-                <span className="date-strip-date">{date}</span>
-                <span className="date-strip-weekday">{shortWeekday(day)}</span>
-                <span className="date-strip-today">{isToday ? "今日" : ""}</span>
-              </>
-            );
+        {/*
+          The strip scrolls sideways on a narrow screen. Like a wide table it
+          takes focus, so the keyboard can scroll it even when no day in view
+          is a link (WCAG 2.1.1; axe scrollable-region-focusable).
+        */}
+        <div aria-label="日付" className="date-strip-scroll" role="region" tabIndex={0}>
+          <ol className="date-strip-days">
+            {strip.map((day, index) => {
+              const [, monthNumber, date] = day.split("-").map(Number);
+              const label = dayLabel(day);
+              const isToday = day === today;
+              const selected = day === from;
+              const hasItems = (counts.get(day) ?? 0) > 0;
+              const inner = (
+                <>
+                  <span className="date-strip-date">{date}</span>
+                  <span className="date-strip-weekday">{shortWeekday(day)}</span>
+                  <span className="date-strip-today">{isToday ? "今日" : ""}</span>
+                </>
+              );
 
-            return (
-              <li data-sunday={index > 0 && label?.weekday === "日曜日"} key={day}>
-                <span aria-hidden="true" className="date-strip-month">
-                  {index === 0 || date === 1 ? `${monthNumber}月` : ""}
-                </span>
-                {hasItems ? (
-                  <Link
-                    aria-current={selected ? "true" : undefined}
-                    aria-label={`${monthNumber}月${date}日 ${label?.weekday ?? ""}${isToday ? "（今日）" : ""}`}
-                    className="date-strip-day"
-                    data-selected={selected}
-                    href={calendarHref({ ...filters, view: "day", from: day, strip: start })}
-                  >
-                    {inner}
-                  </Link>
-                ) : (
-                  <span className="date-strip-day" data-empty="true" data-selected={selected}>
-                    <span className="visually-hidden">{`${monthNumber}月${date}日 ${label?.weekday ?? ""}、予定なし`}</span>
-                    <span aria-hidden="true" className="date-strip-day-inner">{inner}</span>
+              return (
+                <li data-sunday={index > 0 && label?.weekday === "日曜日"} key={day}>
+                  <span aria-hidden="true" className="date-strip-month">
+                    {index === 0 || date === 1 ? `${monthNumber}月` : ""}
                   </span>
-                )}
-              </li>
-            );
-          })}
-        </ol>
+                  {hasItems ? (
+                    <Link
+                      aria-current={selected ? "true" : undefined}
+                      aria-label={`${monthNumber}月${date}日 ${label?.weekday ?? ""}${isToday ? "（今日）" : ""}`}
+                      className="date-strip-day"
+                      data-selected={selected}
+                      href={calendarHref({ ...filters, view: "day", from: day, strip: start })}
+                    >
+                      {inner}
+                    </Link>
+                  ) : (
+                    <span className="date-strip-day" data-empty="true" data-selected={selected}>
+                      <span className="visually-hidden">{`${monthNumber}月${date}日 ${label?.weekday ?? ""}、予定なし`}</span>
+                      <span aria-hidden="true" className="date-strip-day-inner">{inner}</span>
+                    </span>
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+        </div>
         <Link
           aria-label="次の週"
           className="button button-quiet date-strip-step"

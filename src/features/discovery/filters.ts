@@ -1,5 +1,6 @@
 import { isEventType } from "@/features/revisions/schema";
 
+import { isCalendarDay, weekStart } from "./calendar";
 import type { DiscoveryFilters, Prefecture } from "./projection";
 
 export type SearchParamsInput = Record<string, string | string[] | undefined>;
@@ -100,8 +101,10 @@ export function parseCalendarQuery(params: SearchParamsInput): CalendarQuery {
 
   return {
     view: view === "month" || (view !== "day" && Boolean(month)) ? "month" : "day",
-    from: tokyoDatePattern.test(from) ? from : null,
-    strip: tokyoDatePattern.test(strip) ? strip : null,
+    // Real days only: `2026-02-30` would roll over to March and leave the
+    // strip starting on a Monday. The strip is also aligned to its Sunday.
+    from: isCalendarDay(from) ? from : null,
+    strip: isCalendarDay(strip) ? weekStart(strip) : null,
     month: /^\d{4}-\d{2}$/.test(month) ? month : null,
     prefecture: shared.prefecture ?? null,
     eventType: shared.eventType ?? null,

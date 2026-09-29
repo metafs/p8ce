@@ -565,6 +565,8 @@ input::placeholder, textarea::placeholder { color: var(--ink-3); }
 .date-strip-title { color: var(--ink-2); font-size: 13px; font-weight: 500; }
 .date-strip-body { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; align-items: end; gap: 8px; }
 .date-strip-step { min-height: 66px; padding: 0; }
+/* position: relative keeps the hidden day text inside the scrolling frame. */
+.date-strip-scroll { position: relative; min-width: 0; }
 .date-strip-days { display: grid; grid-template-columns: repeat(28, minmax(0, 1fr)); margin: 0; padding: 0; list-style: none; }
 /* position: relative keeps the visually hidden day text inside the scrolling strip. */
 .date-strip-days li { position: relative; display: grid; grid-template-rows: 20px 66px; min-width: 0; }
@@ -718,8 +720,9 @@ a.date-strip-day:hover .date-strip-date { text-decoration: underline; text-under
   .calendar-head { align-items: stretch; }
   .view-switch { width: 100%; }
   .view-switch > * { min-height: 44px; }
-  .date-strip-body { display: block; overflow-x: auto; margin-inline: calc(var(--gutter) * -1); padding-inline: var(--gutter); }
-  .date-strip-step { display: none; }
+  /* The week steps stay beside the strip; only the days scroll sideways. */
+  .date-strip-body { gap: 4px; }
+  .date-strip-scroll { overflow-x: auto; }
   .date-strip-days { grid-template-columns: repeat(28, 44px); width: max-content; }
   .calendar-results-head { margin-top: 32px; }
   .row-extra { grid-column: 2; }
