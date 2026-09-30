@@ -339,31 +339,142 @@ export function openApplications(
       ));
 }
 
-/**
- * Groups Events onto the Tokyo calendar days their Schedules fall on. An Event
- * with several Schedules appears on each of those days; an Event with none does
- * not appear at all.
- */
-export function calendarDays(
-  events: readonly DiscoveryEventSummary[],
-): { day: string; events: DiscoveryEventSummary[] }[] {
-  const byDay = new Map<string, DiscoveryEventSummary[]>();
+export type TicketOfferRow = {
+  event_revision_id: string;
+  price_type: string;
+  label: string | null;
+  currency: string | null;
+  amount_minor: number | string | null;
+  min_amount_minor: number | string | null;
+  max_amount_minor: number | string | null;
+  display_order: number;
+};
 
-  for (const event of events) {
-    const days = new Set<string>();
-    for (const schedule of event.schedules) {
+export type AccessLinkRow = {
+  event_revision_id: string;
+  kind: string;
+  label: string | null;
+  url: string;
+  display_order: number;
+};
+
+/** Calendar-only filters on top of the shared discovery filters. */
+export type CalendarFilters = DiscoveryFilters & {
+  venueId?: string | null;
+  /** Only Events whose every Ticket Offer is free. */
+  free?: boolean;
+};
+
+export type CalendarEntry = {
+  event: DiscoveryEventSummary;
+  festival: { id: string; title: string } | null;
+  offers: TicketOfferRow[];
+  accessLinks: AccessLinkRow[];
+  free: boolean;
+};
+
+export type CalendarDayItem = {
+  entry: CalendarEntry;
+  /** The Event's Schedules on this day, after the region and venue filters. */
+  schedules: DiscoveryScheduleView[];
+};
+
+export type CalendarDay = { day: string; items: CalendarDayItem[] };
+
+/** Free means at least one Ticket Offer, and every one of them `free`. */
+export function isFreeOffers(offers: readonly { price_type: string }[]) {
+  return offers.length > 0 && offers.every((offer) => offer.price_type === "free");
+}
+
+function byRevision<T extends { event_revision_id: string; display_order: number }>(rows: readonly T[]) {
+  const map = new Map<string, T[]>();
+  for (const row of rows) {
+    const list = map.get(row.event_revision_id) ?? [];
+    list.push(row);
+    map.set(row.event_revision_id, list);
+  }
+  for (const list of map.values()) list.sort((left, right) => left.display_order - right.display_order);
+  return map;
+}
+
+/**
+ * The Events a Calendar shows. A Festival itself never appears: the Calendar
+ * shows its child Events, each naming the Festival (REQ-DISCOVERY-001). The
+ * region and venue filters narrow each Event's Schedules, so an Event is
+ * placed only on the days it runs in that region or at that Venue
+ * (REQ-DISCOVERY-002). Date bounds are left to the caller.
+ */
+export function calendarEntries(input: {
+  events: readonly DiscoveryEventSummary[];
+  offers?: readonly TicketOfferRow[];
+  accessLinks?: readonly AccessLinkRow[];
+  filters?: CalendarFilters;
+}): CalendarEntry[] {
+  const filters = input.filters ?? {};
+  const eventById = new Map(input.events.map((event) => [event.id, event]));
+  const offersByRevision = byRevision(input.offers ?? []);
+  const linksByRevision = byRevision(input.accessLinks ?? []);
+  const entries: CalendarEntry[] = [];
+
+  for (const event of input.events) {
+    if (event.eventType === "festival") continue;
+    if (filters.eventType && event.eventType !== filters.eventType) continue;
+    if (filters.text && !matchesText(event, filters.text)) continue;
+
+    const offers = offersByRevision.get(event.publishedRevisionId) ?? [];
+    const free = isFreeOffers(offers);
+    if (filters.free && !free) continue;
+
+    const schedules = event.schedules.filter((schedule) =>
+      (!filters.prefecture || schedule.prefecture === filters.prefecture)
+      && (!filters.venueId || schedule.venueId === filters.venueId));
+    if (schedules.length === 0) continue;
+
+    const parent = event.parentEventId ? eventById.get(event.parentEventId) : null;
+
+    entries.push({
+      event: { ...event, schedules },
+      festival: parent ? { id: parent.id, title: parent.title } : null,
+      offers,
+      accessLinks: linksByRevision.get(event.publishedRevisionId) ?? [],
+      free,
+    });
+  }
+
+  return entries;
+}
+
+/**
+ * Groups calendar entries onto the Tokyo days their Schedules fall on. An Event
+ * with several Schedules appears once on each of those days, carrying that
+ * day's Schedules; within a day, items run in order of their first start.
+ */
+export function calendarDayItems(entries: readonly CalendarEntry[]): CalendarDay[] {
+  const byDay = new Map<string, CalendarDayItem[]>();
+
+  for (const entry of entries) {
+    const schedulesByDay = new Map<string, DiscoveryScheduleView[]>();
+    for (const schedule of entry.event.schedules) {
       const day = tokyoDateKey(schedule.startsAt);
-      if (day) days.add(day);
+      if (!day) continue;
+      const list = schedulesByDay.get(day) ?? [];
+      list.push(schedule);
+      schedulesByDay.set(day, list);
     }
 
-    for (const day of days) {
-      const dayEvents = byDay.get(day) ?? [];
-      dayEvents.push(event);
-      byDay.set(day, dayEvents);
+    for (const [day, schedules] of schedulesByDay) {
+      const items = byDay.get(day) ?? [];
+      items.push({ entry, schedules });
+      byDay.set(day, items);
     }
   }
 
   return [...byDay.entries()]
     .sort(([left], [right]) => left.localeCompare(right))
-    .map(([day, dayEvents]) => ({ day, events: dayEvents }));
+    .map(([day, items]) => ({
+      day,
+      items: items.sort((left, right) =>
+        left.schedules[0].startsAt.localeCompare(right.schedules[0].startsAt)
+        || left.entry.event.title.localeCompare(right.entry.event.title, "ja")),
+    }));
 }

@@ -61,6 +61,16 @@ test("a Visitor discovers Events without signing in", async ({ page }) => {
   await expect(page.getByRole("link", { name: festivalChild })).toBeVisible();
   await page.goto("/calendar?month=2030-06");
   await expect(page.getByRole("link", { name: openCall })).toHaveCount(0);
+
+  // The day view lists a Festival's child Event on its day and names the
+  // Festival, but never lists the Festival itself as a row (REQ-DISCOVERY-001).
+  await page.goto("/calendar?from=2030-07-03");
+  await expect(page.getByRole("heading", { name: "7.03 水曜日から" })).toBeVisible();
+  await expect(page.getByRole("link", { name: festivalChild })).toBeVisible();
+  await expect(page.getByRole("link", { name: festival, exact: true })).toBeVisible();
+  await expect(page.locator(".row-title", { hasText: new RegExp(`^${festival}$`) })).toHaveCount(0);
+  await page.goto("/calendar?view=month&month=2030-07");
+  await expect(page.getByRole("link", { name: festivalChild })).toBeVisible();
 });
 
 test("a Visitor sees Festival structure, archive, and cancellation", async ({ page }) => {

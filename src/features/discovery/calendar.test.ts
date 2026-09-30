@@ -3,10 +3,15 @@ import { describe, expect, it } from "vitest";
 import {
   addDays,
   addMonths,
+  dateStrip,
+  isCalendarDay,
   monthGrid,
   monthLabel,
+  pageDays,
+  resolveDay,
   resolveMonth,
   weekdayIndex,
+  weekStart,
 } from "./calendar";
 
 describe("calendar arithmetic", () => {
@@ -99,5 +104,44 @@ describe("monthGrid", () => {
 
     expect(grid.previousMonth).toBe("2025-12");
     expect(grid.nextMonth).toBe("2026-02");
+  });
+});
+
+describe("day view", () => {
+  it("starts from a valid requested day and otherwise from today in Tokyo", () => {
+    const now = new Date("2026-09-27T16:00:00.000Z"); // 2026-09-28 01:00 in Tokyo
+    expect(resolveDay("2026-10-03", now)).toBe("2026-10-03");
+    expect(resolveDay("2026-02-30", now)).toBe("2026-09-28");
+    expect(resolveDay("tomorrow", now)).toBe("2026-09-28");
+    expect(resolveDay(null, now)).toBe("2026-09-28");
+  });
+
+  it("accepts only real calendar days", () => {
+    expect(isCalendarDay("2026-02-28")).toBe(true);
+    expect(isCalendarDay("2026-02-30")).toBe(false);
+    expect(isCalendarDay("2026-13-01")).toBe(false);
+    expect(isCalendarDay(null)).toBe(false);
+  });
+
+  it("builds a Sunday-first strip of four weeks", () => {
+    expect(weekStart("2026-09-28")).toBe("2026-09-27");
+    expect(weekStart("2026-09-27")).toBe("2026-09-27");
+    const strip = dateStrip("2026-09-27");
+    expect(strip).toHaveLength(28);
+    expect(strip[0]).toBe("2026-09-27");
+    expect(strip[27]).toBe("2026-10-24");
+  });
+
+  it("pages whole days until the limit is reached", () => {
+    const days = [
+      { day: "2026-09-30", items: [1] },
+      { day: "2026-10-01", items: [1, 2] },
+      { day: "2026-10-02", items: [1, 2, 3] },
+      { day: "2026-10-03", items: [1] },
+    ];
+
+    expect(pageDays(days, "2026-10-01", 4)).toEqual({ days: [days[1], days[2]], nextDay: "2026-10-03" });
+    expect(pageDays(days, "2026-10-01", 10)).toEqual({ days: [days[1], days[2], days[3]], nextDay: null });
+    expect(pageDays(days, "2026-11-01", 4)).toEqual({ days: [], nextDay: null });
   });
 });

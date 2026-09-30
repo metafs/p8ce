@@ -1,5 +1,6 @@
 import { isEventType } from "@/features/revisions/schema";
 
+import { isCalendarDay, weekStart } from "./calendar";
 import type { DiscoveryFilters, Prefecture } from "./projection";
 
 export type SearchParamsInput = Record<string, string | string[] | undefined>;
@@ -64,4 +65,74 @@ export function hasActiveFilter(filters: DiscoveryFilters): boolean {
   return Boolean(
     filters.from || filters.to || filters.prefecture || filters.eventType || filters.text,
   );
+}
+
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export type CalendarView = "day" | "month";
+
+export type CalendarQuery = {
+  view: CalendarView;
+  /** Requested first day of the day view; resolved against today later. */
+  from: string | null;
+  /** Requested first day of the date strip. */
+  strip: string | null;
+  /** Requested month of the month view, `YYYY-MM`. */
+  month: string | null;
+  prefecture: Prefecture | null;
+  eventType: DiscoveryFilters["eventType"];
+  venueId: string | null;
+  free: boolean;
+};
+
+/**
+ * Reads the Calendar's query string. The day view is the default; a `month`
+ * without a `view` still opens the month view, so links made before the day
+ * view existed keep working. Unknown values are dropped, as with the 探す
+ * filters.
+ */
+export function parseCalendarQuery(params: SearchParamsInput): CalendarQuery {
+  const view = single(params.view);
+  const month = single(params.month);
+  const from = single(params.from);
+  const strip = single(params.strip);
+  const venue = single(params.venue);
+  const shared = parseDiscoveryFilters({ prefecture: params.prefecture, type: params.type });
+
+  return {
+    view: view === "month" || (view !== "day" && Boolean(month)) ? "month" : "day",
+    // Real days only: `2026-02-30` would roll over to March and leave the
+    // strip starting on a Monday. The strip is also aligned to its Sunday.
+    from: isCalendarDay(from) ? from : null,
+    strip: isCalendarDay(strip) ? weekStart(strip) : null,
+    month: /^\d{4}-\d{2}$/.test(month) ? month : null,
+    prefecture: shared.prefecture ?? null,
+    eventType: shared.eventType ?? null,
+    venueId: uuidPattern.test(venue) ? venue.toLowerCase() : null,
+    free: single(params.free) === "1",
+  };
+}
+
+/**
+ * The Calendar URL for a query, keeping only what differs from the defaults so
+ * shared links stay short.
+ */
+export function calendarHref(query: Partial<CalendarQuery>): string {
+  const params = new URLSearchParams();
+
+  if (query.view === "month") params.set("view", "month");
+  if (query.view === "month" && query.month) params.set("month", query.month);
+  if (query.view !== "month" && query.from) params.set("from", query.from);
+  if (query.view !== "month" && query.strip) params.set("strip", query.strip);
+  if (query.prefecture) params.set("prefecture", query.prefecture);
+  if (query.eventType) params.set("type", query.eventType);
+  if (query.venueId) params.set("venue", query.venueId);
+  if (query.free) params.set("free", "1");
+
+  const search = params.toString();
+  return search ? `/calendar?${search}` : "/calendar";
+}
+
+export function hasCalendarFilter(query: Pick<CalendarQuery, "prefecture" | "eventType" | "venueId" | "free">) {
+  return Boolean(query.prefecture || query.eventType || query.venueId || query.free);
 }

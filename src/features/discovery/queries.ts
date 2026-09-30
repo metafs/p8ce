@@ -3,18 +3,23 @@ import "server-only";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 import {
-  calendarDays,
+  calendarDayItems,
+  calendarEntries,
   filterSchedulesForFilters,
   matchesFilters,
   openApplications,
   projectEvents,
   sortByDiscoveryOrder,
+  type AccessLinkRow,
   type ArtistCreditRow,
+  type CalendarFilters,
   type DiscoveryEventSummary,
   type DiscoveryFilters,
   type EventRow,
+  type Prefecture,
   type RevisionRow,
   type ScheduleRow,
+  type TicketOfferRow,
   type VenueRow,
 } from "./projection";
 
@@ -158,11 +163,56 @@ export async function listOpenApplications() {
 }
 
 /**
- * Calendar entries by Tokyo calendar day. Application deadlines are excluded
- * by construction: only Schedules place an Event on a day (REQ-DISCOVERY-001).
+ * Calendar entries by Tokyo calendar day, with the Ticket Offers and access
+ * links the day view shows when a row is opened. Application deadlines are
+ * excluded by construction: only Schedules place an Event on a day
+ * (REQ-DISCOVERY-001). `venues` lists every Venue with a calendar Schedule,
+ * before filtering, for the Venue filter.
  */
-export async function listCalendarDays(filters: DiscoveryFilters = {}) {
-  const events = await loadPublicEvents();
+const prefectureOrder: Record<Prefecture, number> = { TOKYO: 0, KANAGAWA: 1 };
 
-  return calendarDays(events.filter((event) => matchesFilters(event, filters)));
+export async function listCalendarDays(filters: CalendarFilters = {}) {
+  const events = await loadPublicEvents();
+  const revisionIds = events.map((event) => event.publishedRevisionId);
+
+  const supabase = await createSupabaseServerClient();
+  const [{ data: offers }, { data: accessLinks }] = revisionIds.length
+    ? await Promise.all([
+      supabase
+        .from("event_ticket_offers")
+        .select("event_revision_id, price_type, label, currency, amount_minor, min_amount_minor, max_amount_minor, display_order")
+        .in("event_revision_id", revisionIds),
+      supabase
+        .from("event_ticket_links")
+        .select("event_revision_id, kind, label, url, display_order")
+        .in("event_revision_id", revisionIds),
+    ])
+    : [{ data: [] as TicketOfferRow[] }, { data: [] as AccessLinkRow[] }];
+
+  const allEntries = calendarEntries({ events });
+  const venueById = new Map<string, { id: string; name: string; prefecture: Prefecture }>();
+  for (const entry of allEntries) {
+    for (const schedule of entry.event.schedules) {
+      venueById.set(schedule.venueId, {
+        id: schedule.venueId,
+        name: schedule.venueName,
+        prefecture: schedule.prefecture,
+      });
+    }
+  }
+
+  const entries = calendarEntries({
+    events,
+    offers: (offers ?? []) as TicketOfferRow[],
+    accessLinks: (accessLinks ?? []) as AccessLinkRow[],
+    filters,
+  });
+
+  return {
+    days: calendarDayItems(entries),
+    // 東京都 before 神奈川県, as REQ-DISCOVERY-002 lists them.
+    venues: [...venueById.values()].sort((left, right) =>
+      prefectureOrder[left.prefecture] - prefectureOrder[right.prefecture]
+      || left.name.localeCompare(right.name, "ja")),
+  };
 }

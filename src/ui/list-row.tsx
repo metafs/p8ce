@@ -13,6 +13,7 @@ export function ListRow({
   detail,
   aside,
   asideSub,
+  extra,
 }: {
   lead?: ReactNode;
   kind?: ReactNode;
@@ -21,6 +22,8 @@ export function ListRow({
   detail?: ReactNode;
   aside?: ReactNode;
   asideSub?: ReactNode;
+  /** Content under the row, beside the lead and kind (e.g. an opened row's details). */
+  extra?: ReactNode;
 }) {
   return (
     <li className="row">
@@ -37,6 +40,7 @@ export function ListRow({
         {aside}
         {asideSub ? <span className="row-aside-sub">{asideSub}</span> : null}
       </div>
+      {extra ? <div className="row-extra">{extra}</div> : null}
     </li>
   );
 }

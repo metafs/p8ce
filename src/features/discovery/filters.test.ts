@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  calendarHref,
   filterQueryString,
+  hasCalendarFilter,
   hasActiveFilter,
+  parseCalendarQuery,
   parseDiscoveryFilters,
 } from "./filters";
 
@@ -108,5 +111,61 @@ describe("hasActiveFilter", () => {
     expect(hasActiveFilter({ from: null, to: null })).toBe(false);
     expect(hasActiveFilter({ eventType: "talk" })).toBe(true);
     expect(hasActiveFilter({ text: "山田" })).toBe(true);
+  });
+});
+
+describe("parseCalendarQuery", () => {
+  const venue = "0b7c7a2e-6a1d-4c55-9a7e-2f1f0e2d9c11";
+
+  it("opens the day view by default and the month view for a bare month", () => {
+    expect(parseCalendarQuery({}).view).toBe("day");
+    expect(parseCalendarQuery({ month: "2030-07" }).view).toBe("month");
+    expect(parseCalendarQuery({ view: "month" }).view).toBe("month");
+    expect(parseCalendarQuery({ view: "day", month: "2030-07" }).view).toBe("day");
+  });
+
+  it("reads the calendar filters and drops values it does not know", () => {
+    expect(parseCalendarQuery({
+      from: "2026-10-03",
+      strip: "2026-09-27",
+      prefecture: "TOKYO",
+      type: "workshop",
+      venue,
+      free: "1",
+    })).toEqual({
+      view: "day",
+      from: "2026-10-03",
+      strip: "2026-09-27",
+      month: null,
+      prefecture: "TOKYO",
+      eventType: "workshop",
+      venueId: venue,
+      free: true,
+    });
+
+    expect(parseCalendarQuery({ from: "2026-02-30", strip: "2026-02-30" })).toMatchObject({ from: null, strip: null });
+    // A strip start is aligned to the Sunday of its week.
+    expect(parseCalendarQuery({ strip: "2026-10-01" }).strip).toBe("2026-09-27");
+
+    expect(parseCalendarQuery({ from: "soon", venue: "not-a-uuid", free: "yes", type: "dance" })).toMatchObject({
+      from: null,
+      venueId: null,
+      free: false,
+      eventType: null,
+    });
+  });
+});
+
+describe("calendarHref", () => {
+  it("keeps only what differs from the defaults", () => {
+    expect(calendarHref({})).toBe("/calendar");
+    expect(calendarHref({ view: "day", from: "2026-10-03", free: true })).toBe("/calendar?from=2026-10-03&free=1");
+    expect(calendarHref({ view: "month", month: "2026-10", from: "2026-10-03", prefecture: "KANAGAWA" }))
+      .toBe("/calendar?view=month&month=2026-10&prefecture=KANAGAWA");
+  });
+
+  it("reports whether any calendar filter is set", () => {
+    expect(hasCalendarFilter({ prefecture: null, eventType: null, venueId: null, free: false })).toBe(false);
+    expect(hasCalendarFilter({ prefecture: null, eventType: null, venueId: null, free: true })).toBe(true);
   });
 });

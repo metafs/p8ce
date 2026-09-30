@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  calendarDays,
+  calendarDayItems,
+  calendarEntries,
   filterSchedulesForFilters,
+  isFreeOffers,
   prefectureLabel,
   matchesFilters,
   matchesText,
@@ -348,7 +350,7 @@ describe("sortByDiscoveryOrder", () => {
   });
 });
 
-describe("calendarDays", () => {
+describe("calendarDayItems", () => {
   it("places an Event on every Tokyo day it runs and omits Events with no Schedule", () => {
     const summaries = projectEvents({
       events: [event("twice"), event("undated")],
@@ -367,10 +369,10 @@ describe("calendarDays", () => {
       now,
     });
 
-    expect(calendarDays(summaries)).toEqual([
-      { day: "2026-05-01", events: [summaries[0]] },
-      { day: "2026-05-03", events: [summaries[0]] },
-    ]);
+    const days = calendarDayItems(calendarEntries({ events: summaries }));
+    expect(days.map((day) => day.day)).toEqual(["2026-05-01", "2026-05-03"]);
+    expect(days.map((day) => day.items.map((item) => item.entry.event.id))).toEqual([["twice"], ["twice"]]);
+    expect(days[0].items[0].schedules.map((item) => item.startsAt)).toEqual(["2026-05-01T10:00:00.000Z"]);
   });
 
   it("never places an application deadline on the calendar", () => {
@@ -385,7 +387,90 @@ describe("calendarDays", () => {
       now,
     });
 
-    expect(calendarDays(summaries)).toEqual([]);
+    expect(calendarDayItems(calendarEntries({ events: summaries }))).toEqual([]);
+  });
+
+  it("orders a day by first start and keeps two shows of one Event in one item", () => {
+    const summaries = projectEvents({
+      events: [event("late"), event("early")],
+      revisions: [revision("late"), revision("early")],
+      schedules: [
+        schedule("late", "2026-05-01T10:00:00.000Z"),
+        schedule("early", "2026-05-01T05:00:00.000Z"),
+        schedule("early", "2026-05-01T09:00:00.000Z"),
+      ],
+      venues,
+      now,
+    });
+
+    const [day] = calendarDayItems(calendarEntries({ events: summaries }));
+    expect(day.items.map((item) => item.entry.event.id)).toEqual(["early", "late"]);
+    expect(day.items[0].schedules).toHaveLength(2);
+  });
+});
+
+describe("calendarEntries", () => {
+  it("shows Festival children naming their Festival, never the Festival itself", () => {
+    const summaries = projectEvents({
+      events: [event("festival"), event("child", { parent_event_id: "festival" })],
+      revisions: [revision("festival", { event_type: "festival", title: "Festival" }), revision("child")],
+      schedules: [schedule("child", "2026-05-01T10:00:00.000Z")],
+      venues,
+      now,
+    });
+
+    const entries = calendarEntries({ events: summaries });
+    expect(entries.map((entry) => entry.event.id)).toEqual(["child"]);
+    expect(entries[0].festival).toEqual({ id: "festival", title: "Festival" });
+  });
+
+  it("narrows Schedules to the region and the Venue", () => {
+    const summaries = projectEvents({
+      events: [event("both")],
+      revisions: [revision("both")],
+      schedules: [
+        schedule("both", "2026-05-01T10:00:00.000Z", "venue-tokyo"),
+        schedule("both", "2026-05-08T10:00:00.000Z", "venue-kanagawa"),
+      ],
+      venues,
+      now,
+    });
+
+    const kanagawa = calendarEntries({ events: summaries, filters: { prefecture: "KANAGAWA" } });
+    expect(calendarDayItems(kanagawa).map((day) => day.day)).toEqual(["2026-05-08"]);
+    const tokyoVenue = calendarEntries({ events: summaries, filters: { venueId: "venue-tokyo" } });
+    expect(calendarDayItems(tokyoVenue).map((day) => day.day)).toEqual(["2026-05-01"]);
+    expect(calendarEntries({ events: summaries, filters: { venueId: "elsewhere" } })).toEqual([]);
+  });
+
+  it("treats an Event as free only when every Ticket Offer is free", () => {
+    const summaries = projectEvents({
+      events: [event("free"), event("mixed"), event("none")],
+      revisions: [revision("free"), revision("mixed"), revision("none")],
+      schedules: [
+        schedule("free", "2026-05-01T10:00:00.000Z"),
+        schedule("mixed", "2026-05-01T10:00:00.000Z"),
+        schedule("none", "2026-05-01T10:00:00.000Z"),
+      ],
+      venues,
+      now,
+    });
+    const offer = (eventId: string, price_type: string, display_order = 0) => ({
+      event_revision_id: `${eventId}-rev`,
+      price_type,
+      label: null,
+      currency: null,
+      amount_minor: null,
+      min_amount_minor: null,
+      max_amount_minor: null,
+      display_order,
+    });
+    const offers = [offer("free", "free"), offer("mixed", "free"), offer("mixed", "fixed", 1)];
+
+    expect(isFreeOffers([])).toBe(false);
+    expect(calendarEntries({ events: summaries, offers, filters: { free: true } })
+      .map((entry) => entry.event.id)).toEqual(["free"]);
+    expect(calendarEntries({ events: summaries, offers })).toHaveLength(3);
   });
 });
 
